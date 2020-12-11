@@ -1,11 +1,11 @@
 package lifx
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/jnovack/dmx2lifx/pkg/golifx"
 	"github.com/lucasb-eyer/go-colorful"
+	"github.com/rs/zerolog/log"
 )
 
 var bulbs []*golifx.Bulb
@@ -22,6 +22,7 @@ func Count() int {
 
 func init() {
 	//Lookup all bulbs
+	log.Warn().Msg("scanning for lifx bulbs (this could take some time)")
 	bulbs, _ = golifx.LookupBulbs()
 
 	// Sort by labels for consistent ordering
@@ -30,15 +31,14 @@ func init() {
 	})
 
 	for b := range bulbs {
-		//Get power st
+		log.Info().Str("bulb", label(bulbs[b])).Int("index", b).Msg("found bulb")
+		//Get power state
 		powerState, _ := bulbs[b].GetPowerState()
 
 		//Turn if off
 		if !powerState {
 			bulbs[b].SetPowerState(true)
 		}
-
-		fmt.Printf("Found Bulb: %s\n", label(bulbs[b]))
 	}
 }
 
@@ -53,16 +53,31 @@ func Set(bulb int, red int, green int, blue int, white int) {
 
 	h, s, v := rgb.Hsv()
 
-	fmt.Printf("%d\t%d\t%d\t%d\t\t%d\t%d\t%d\t%d\n", red, green, blue, white, int(h/360*65535), int(s*65535), int(v*65535), (int(w*6500/255))+2500)
+	hue := uint16(h / 360 * 65535)
+	saturation := uint16(s * 65535)
+	brightness := uint16(v * 65535)
+	kelvin := (uint16(w * 6500 / 255)) + 2500
+
+	log.Debug().
+		Int("bulb", bulb).
+		Int("red", red).
+		Int("green", green).
+		Int("blue", blue).
+		Int("white", white).
+		Uint16("hue", hue).
+		Uint16("saturation", saturation).
+		Uint16("brightness", brightness).
+		Uint16("kelvin", kelvin).
+		Msg("setting bulb")
 
 	hsbk := &golifx.HSBK{
-		Hue:        uint16(h / 360 * 65535),
-		Saturation: uint16(s * 65535),
-		Brightness: uint16(v * 65535),
-		Kelvin:     uint16((int(w * 6500 / 255)) + 2500),
+		Hue:        hue,
+		Saturation: saturation,
+		Brightness: brightness,
+		Kelvin:     kelvin,
 	}
 
 	go func(bulb int, hsbk *golifx.HSBK) {
-		bulbs[bulb].SetColorStateQuick(hsbk, 0)
+		bulbs[bulb].SetColorState(hsbk, 0)
 	}(bulb, hsbk)
 }
